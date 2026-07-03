@@ -5,6 +5,11 @@ import yt_dlp
 
 from config import MAX_VIDEO_HEIGHT
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
 
 async def search_youtube_list(query: str, limit: int = 10) -> list[dict]:
     opts = {
@@ -50,6 +55,7 @@ async def download_audio(url_or_query: str, out_dir: str, quality: str = "192", 
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+        "http_headers": HEADERS,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
@@ -75,16 +81,21 @@ async def download_audio(url_or_query: str, out_dir: str, quality: str = "192", 
 async def download_video(url: str, out_dir: str, max_height: int = MAX_VIDEO_HEIGHT) -> tuple[str, str]:
     os.makedirs(out_dir, exist_ok=True)
     outtmpl = os.path.join(out_dir, "%(id)s.%(ext)s")
+
+    # TikTok uchun maxsus sozlamalar
+    if "tiktok.com" in url or "vm.tiktok.com" in url:
+        fmt = "best"
+    else:
+        fmt = f"bestvideo[height<={max_height}]+bestaudio/best[height<={max_height}]/best"
+
     opts = {
-        "format": f"bestvideo[height<={max_height}]+bestaudio/best[height<={max_height}]/best",
+        "format": fmt,
         "outtmpl": outtmpl,
         "merge_output_format": "mp4",
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        },
+        "http_headers": HEADERS,
     }
 
     def _download():
