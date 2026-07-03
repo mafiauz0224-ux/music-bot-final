@@ -75,7 +75,7 @@ async def search_youtube_list(query: str, limit: int = 10) -> list[dict]:
         "no_warnings": True,
         "noplaylist": True,
         "default_search": f"ytsearch{limit}",
-        "extract_flat": False,
+        "extract_flat": True,
     }
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _run_search_list, opts, query)
