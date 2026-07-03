@@ -11,10 +11,9 @@ async def search_youtube_list(query: str, limit: int = 10) -> list[dict]:
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "default_search": f"ytsearch{limit}",
-        "skip_download": True,
+        "default_search": f"scsearch{limit}",
+        "extract_flat": True,
     }
-    loop = asyncio.get_event_loop()
 
     def _search():
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -27,10 +26,11 @@ async def search_youtube_list(query: str, limit: int = 10) -> list[dict]:
                 results.append({
                     "title": e.get("title", "Noma'lum"),
                     "duration": e.get("duration") or 0,
-                    "url": e.get("webpage_url") or f"https://www.youtube.com/watch?v={e.get('id')}",
+                    "url": e.get("url") or e.get("webpage_url", ""),
                 })
             return results
 
+    loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _search)
 
 
@@ -50,9 +50,7 @@ async def download_audio(url_or_query: str, out_dir: str, quality: str = "192", 
         }],
     }
     if use_search:
-        opts["default_search"] = "ytsearch1"
-
-    loop = asyncio.get_event_loop()
+        opts["default_search"] = "scsearch1"
 
     def _download():
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -63,6 +61,7 @@ async def download_audio(url_or_query: str, out_dir: str, quality: str = "192", 
             base, _ = os.path.splitext(filename)
             return base + ".mp3", info.get("title", url_or_query)
 
+    loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _download)
 
 
@@ -76,9 +75,10 @@ async def download_video(url: str, out_dir: str, max_height: int = MAX_VIDEO_HEI
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        },
     }
-
-    loop = asyncio.get_event_loop()
 
     def _download():
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -88,6 +88,7 @@ async def download_video(url: str, out_dir: str, max_height: int = MAX_VIDEO_HEI
             mp4 = base + ".mp4"
             return (mp4 if os.path.exists(mp4) else filename), info.get("title", "video")
 
+    loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _download)
 
 
