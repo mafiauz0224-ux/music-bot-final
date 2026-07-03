@@ -12,21 +12,28 @@ async def search_youtube_list(query: str, limit: int = 10) -> list[dict]:
         "no_warnings": True,
         "noplaylist": True,
         "default_search": f"scsearch{limit}",
-        "extract_flat": True,
     }
 
     def _search():
         with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(query, download=False)
-            entries = info.get("entries", []) if info else []
+            try:
+                info = ydl.extract_info(query, download=False)
+            except Exception:
+                return []
+            if not info:
+                return []
+            entries = info.get("entries", [info])
             results = []
             for e in entries:
                 if not e:
                     continue
+                url = e.get("webpage_url") or e.get("url", "")
+                if not url:
+                    continue
                 results.append({
                     "title": e.get("title", "Noma'lum"),
                     "duration": e.get("duration") or 0,
-                    "url": e.get("url") or e.get("webpage_url", ""),
+                    "url": url,
                 })
             return results
 
