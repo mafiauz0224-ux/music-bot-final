@@ -19,13 +19,7 @@ from utils.downloader import download_audio, search_youtube_list
 
 router = Router()
 
-# search_id -> qidiruv natijalari ro'yxati (vaqtinchalik, RAM'da).
-# Bu kichik matnli ma'lumot (sarlavha/davomiylik/havola), shu sabab
-# disk muammosi keltirib chiqarmaydi - lekin baribir vaqt o'tib o'zi
-# o'chib ketishi uchun TTL beramiz.
 SEARCH_RESULTS_CACHE: dict[str, list[dict]] = {}
-SEARCH_CACHE_TTL = 10 * 60  # 10 daqiqa
-
 _background_tasks: set[asyncio.Task] = set()
 
 
@@ -37,7 +31,7 @@ def _run_in_background(coro):
 
 
 async def _expire_search(search_id: str):
-    await asyncio.sleep(SEARCH_CACHE_TTL)
+    await asyncio.sleep(600)
     SEARCH_RESULTS_CACHE.pop(search_id, None)
 
 
@@ -48,9 +42,6 @@ def _format_duration(seconds) -> str:
 
 
 async def search_and_show_results(message: Message, query: str):
-    """Qo'shiq nomi bo'yicha TOP 10 nomzodni ro'yxat qilib, raqamli
-    tugmalar bilan ko'rsatadi. Hech narsa avtomatik yuklanmaydi -
-    foydalanuvchi qaysi raqamni bossa, faqat o'sha bitta qo'shiq yuklanadi."""
     lang = await get_user_language(message.from_user.id)
     status_msg = await message.answer(t("searching", lang, query=query))
 
@@ -71,27 +62,27 @@ async def search_and_show_results(message: Message, query: str):
         f"{i + 1}. {r['title']} — {_format_duration(r.get('duration'))}"
         for i, r in enumerate(results)
     ]
-    text = t("search_results_title", lang, query=query) + "\n\n" + "\n".join(lines)
+    text = f'🔎 "{query}" uchun natijalar — birini tanlang:\n\n' + "\n".join(lines)
     await status_msg.edit_text(text, reply_markup=kb.search_results_keyboard(search_id, len(results)))
 
 
-# Eski nom bilan ham ishlatilishi mumkin - search.py va recognize.py shu nomdan foydalanadi
 handle_music_search = search_and_show_results
 
 
 @router.callback_query(F.data.startswith("pick_"))
 async def pick_song_callback(call: CallbackQuery):
     lang = await get_user_language(call.from_user.id)
-    _, search_id, idx_str = call.data.split("_", 2)
-    idx = int(idx_str)
+    parts = call.data.split("_")
+    search_id = parts[1]
+    idx = int(parts[2])
 
     results = SEARCH_RESULTS_CACHE.get(search_id)
     if not results or idx >= len(results):
-        await call.answer(t("song_not_found", lang), show_alert=True)
+        await call.answer("Natija topilmadi, qaytadan qidiring", show_alert=True)
         return
 
     chosen = results[idx]
-    await call.answer(t("downloading_chosen", lang))
+    await call.answer("Yuklanmoqda...")
 
     query_hash = hashlib.md5(chosen["url"].encode()).hexdigest()
     cached = await get_cached_song(query_hash)
@@ -99,7 +90,7 @@ async def pick_song_callback(call: CallbackQuery):
     if cached:
         await call.message.answer_audio(
             cached["file_id"],
-            caption=t("here_is_song", lang, title=cached["title"]),
+            caption=f"🎵 {cached['title']}",
             reply_markup=kb.song_action_keyboard(query_hash),
         )
         await log_song_request(call.from_user.id, chosen["title"], cached["title"])
@@ -107,18 +98,22 @@ async def pick_song_callback(call: CallbackQuery):
 
     try:
         filepath, title = await download_audio(chosen["url"], DOWNLOAD_DIR, use_search=False)
-    except Exception:
-        await call.message.answer(t("not_found", lang))
+    except Exception as e:
+        await call.message.answer(f"❌ Yuklab bo'lmadi: {str(e)[:100]}")
+        return
+
+    if not os.path.exists(filepath):
+        await call.message.answer("❌ Fayl yaratilmadi")
         return
 
     audio = FSInputFile(filepath)
     sent = await call.message.answer_audio(
         audio,
         title=title,
-        caption=t("here_is_song", lang, title=title),
+        caption=f"🎵 {title}",
         reply_markup=kb.song_action_keyboard(query_hash),
     )
-    await cache_song(query_hash, title, sent.audio.file_id, "youtube")
+    await cache_song(query_hash, title, sent.audio.file_id, "soundcloud")
     await log_song_request(call.from_user.id, title, title)
 
     try:
@@ -137,7 +132,7 @@ async def redownload_callback(call: CallbackQuery):
         return
     await call.message.answer_audio(
         cached["file_id"],
-        caption=t("here_is_song", lang, title=cached["title"]),
+        caption=f"🎵 {cached['title']}",
         reply_markup=kb.song_action_keyboard(query_hash),
     )
     await call.answer()
